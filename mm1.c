@@ -79,10 +79,6 @@ int mm_init(void)
 }
 
 //---------------------------------------------------------------------------------------------------------------
-/*
- * mm_malloc - Allocate a block by incrementing the brk pointer.
- *     Always allocate a block whose size is a multiple of the alignment.
- */
 
  header_t *free_bestfit_block(size_t size)
  {
@@ -100,6 +96,10 @@ int mm_init(void)
  	return block;
  }
 
+ /*
+  * mm_malloc - Allocate a block by incrementing the brk pointer.
+  *     Always allocate a block whose size is a multiple of the alignment.
+  */
 
 void *mm_malloc(size_t size)
 {
@@ -165,6 +165,23 @@ void mm_free(void *ptr)
    }
    header = (header_t*)ptr - 1;
    header->free_flag = 1;
+
+   header_t *curr = head, *block = head;
+   while(curr) {
+  		if(curr->free_flag){
+        block = curr->next;
+        long unsigned coal_size = curr->size;
+        header_t *next = curr->next;
+        while(block && block->free_flag){
+          coal_size = coal_size + block->size + sizeof(header_t);
+          next = block->next;
+          block = block->next;
+        }
+        curr->size = coal_size;
+        curr->next = next;
+      }
+  		curr = curr->next;
+  	}
 }
 
 /*
