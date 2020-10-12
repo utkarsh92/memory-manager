@@ -23,24 +23,22 @@
  * provide your team information in the following struct.
  ********************************************************/
 team_t team = {
-    /* Team name */
-    "team name",
-    /* First member's full name */
-    "member 1",
-    /* First member's email address */
-    "member_1@cse.iitb.ac.in",
-    /* Second member's full name (leave blank if none) */
-    "member 2",
-    /* Second member's email address (leave blank if none) */
-    "member_2@cse.iitb.ac.in"
-};
+	/* Team name */
+	"Hakaishins",
+	/* First member's full name */
+	"Utkarsh Indolia",
+	/* First member's email address */
+	"utkarshindolia@cse.iitb.ac.in",
+	/* Second member's full name (leave blank if none) */
+	"Prashant Ravi",
+	/* Second member's email address (leave blank if none) */
+	"prashantravi@cse.iitb.ac.in"};
 
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
 /* rounds up to the nearest multiple of ALIGNMENT */
-#define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
-
+#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7)
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 
@@ -52,18 +50,17 @@ void *init_mem_sbrk_break = NULL;
 
 int mm_init(void)
 {
-	
+
 	//This function is called every time before each test run of the trace.
-	//It should reset the entire state of your malloc or the consecutive trace runs will give wrong answer.	
-	
+	//It should reset the entire state of your malloc or the consecutive trace runs will give wrong answer.
 
 	/* 
 	 * This function should initialize and reset any data structures used to represent the starting state(empty heap)
 	 * 
 	 * This function will be called multiple time in the driver code "mdriver.c"
 	 */
-	
-    return 0;		//Returns 0 on successfull initialization.
+
+	return 0; //Returns 0 on successfull initialization.
 }
 
 //---------------------------------------------------------------------------------------------------------------
@@ -72,7 +69,7 @@ int mm_init(void)
  *     Always allocate a block whose size is a multiple of the alignment.
  */
 void *mm_malloc(size_t size)
-{	
+{
 	/* 
 	 * This function should keep track of the allocated memory blocks.
 	 * The block allocation should minimize the number of holes (chucks of unusable memory) in the heap memory.
@@ -81,16 +78,16 @@ void *mm_malloc(size_t size)
 	 * Try to keep the heap size as small as possible.
 	 */
 
-	if(size <= 0){		// Invalid request size
+	if (size <= 0)
+	{ // Invalid request size
 		return NULL;
 	}
-	size = ((size+7)/8)*8;		//size alligned to 8 bytes
-	
-	return mem_sbrk(size);		//mem_sbrk() is wrapper function for the sbrk() system call. 
-								//Please use mem_sbrk() instead of sbrk() otherwise the evaluation results 
-								//may give wrong results
-}
+	size = ((size + 7) / 8) * 8; //size alligned to 8 bytes
 
+	return mem_sbrk(size); //mem_sbrk() is wrapper function for the sbrk() system call.
+						   //Please use mem_sbrk() instead of sbrk() otherwise the evaluation results
+						   //may give wrong results
+}
 
 void mm_free(void *ptr)
 {
@@ -110,14 +107,16 @@ void mm_free(void *ptr)
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
 void *mm_realloc(void *ptr, size_t size)
-{	
-	size = ((size+7)/8)*8; //8-byte alignement	
-	
-	if(ptr == NULL){			//memory was not previously allocated
+{
+	size = ((size + 7) / 8) * 8; //8-byte alignement
+
+	if (ptr == NULL)
+	{ //memory was not previously allocated
 		return mm_malloc(size);
 	}
-	
-	if(size == 0){				//new size is zero
+
+	if (size == 0)
+	{ //new size is zero
 		mm_free(ptr);
 		return NULL;
 	}
@@ -132,19 +131,4 @@ void *mm_realloc(void *ptr, size_t size)
 
 	mm_free(ptr);
 	return mem_sbrk(size);
-	
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
