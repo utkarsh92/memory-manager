@@ -136,7 +136,7 @@ header_t *free_bestfit_block(size_t size)
 
 // Yhi h wo fragmentation ka code jo chl ni prev_header
 
- /*if(block!=NULL){
+ if(block!=NULL){
     long rem_space = block->size - size - sizeof(header_t);
     if(rem_space >= 8){
       //printf("Demand size:%lu\n",size);
@@ -148,11 +148,19 @@ header_t *free_bestfit_block(size_t size)
       break_header->free_flag = 1;
       block->size = size;
       block->next = break_header;
+      break_header->prev = block;
+      if(break_header->next){
+        (break_header->next)->prev = break_header;
+      }
+      else
+      {
+        tail = break_header;
+      }
       //printf("After breaking, left part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
       //printf("After breaking, right part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", break_header->size, (char *)break_header, (char *)break_header + sizeof(header_t), (char *)break_header + sizeof(header_t) + break_header->size);
       //printf("\n\n");
     }
-  } */
+  }
   return block;
 }
 
@@ -266,29 +274,13 @@ void *mm_realloc(void *ptr, size_t size)
 	*/
 
 
-
-  header_t *header, *next_header;
+  header_t *header;
   header = (header_t *)ptr - 1;
   unsigned long int prev_size = header->size;
-  next_header = header->next;
 
   if (size == prev_size)
   {
     return ptr;
-  }
-  //if next block is free to bs extending block ko extend kr rha hu
-  //prev block k saath ye try mt krna kaafi time waste kra h. Naa memcpy se chla na memmove se
-  if(next_header && next_header->free_flag){
-    long new_size = header->size + next_header->size + sizeof(header_t);
-    if(new_size>=size){
-      header->size = new_size;
-      header->next = next_header->next;
-      header_t *next_next_header = next_header->next;
-      if(next_next_header){
-        next_next_header->prev = header;
-      }
-      return ptr;
-    }
   }
 
   void *new_chunk = mm_malloc(size);
