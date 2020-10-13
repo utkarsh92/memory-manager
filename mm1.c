@@ -84,6 +84,7 @@ void coalesce(header_t *header){
   prev_header = header->prev;
   if(next_header && prev_header && next_header->free_flag && prev_header->free_flag)
   {
+    //checking if both previous and next block are free
     unsigned long new_size = header->size + prev_header->size + next_header->size + 2*sizeof(header_t);
     prev_header->size = new_size;
     prev_header->next = next_header->next;
@@ -94,6 +95,7 @@ void coalesce(header_t *header){
   }
   else if(next_header && next_header->free_flag)
   {
+      //checking if next block only is free
       unsigned long new_size = header->size + next_header->size + sizeof(header_t);
       header->size = new_size;
       header->next = next_header->next;
@@ -104,6 +106,7 @@ void coalesce(header_t *header){
   }
   else if(prev_header && prev_header->free_flag)
   {
+    //checking if prev block only is free
     unsigned long new_size = header->size + prev_header->size + sizeof(header_t);
     prev_header->size = new_size;
     prev_header->next = header->next;
@@ -130,6 +133,8 @@ header_t *free_bestfit_block(size_t size)
     }
     curr = curr->next;
   }
+
+// Yhi h wo fragmentation ka code jo chl ni prev_header
 
  /*if(block!=NULL){
     long rem_space = block->size - size - sizeof(header_t);
@@ -271,7 +276,8 @@ void *mm_realloc(void *ptr, size_t size)
   {
     return ptr;
   }
-
+  //if next block is free to bs extending block ko extend kr rha hu
+  //prev block k saath ye try mt krna kaafi time waste kra h. Naa memcpy se chla na memmove se
   if(next_header && next_header->free_flag){
     long new_size = header->size + next_header->size + sizeof(header_t);
     if(new_size>=size){
