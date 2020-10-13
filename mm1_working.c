@@ -40,7 +40,7 @@ struct header
   unsigned long int size;
   int free_flag;
   struct header *next;
-  char waste[4]; //To pad to 16 bytes
+  struct header *prev;
 };
 
 typedef struct header header_t;
@@ -78,6 +78,41 @@ int mm_init(void)
 }
 
 //---------------------------------------------------------------------------------------------------------------
+void coalesce(header_t *header){
+  header_t *next_header, *prev_header;
+  next_header = header->next;
+  prev_header = header->prev;
+  if(next_header && prev_header && next_header->free_flag && prev_header->free_flag)
+  {
+    unsigned long new_size = header->size + prev_header->size + next_header->size + 2*sizeof(header_t);
+    prev_header->size = new_size;
+    prev_header->next = next_header->next;
+    header_t *next_next_header = next_header->next;
+    if(next_next_header){
+      next_next_header->prev = prev_header;
+    }
+  }
+  else if(next_header && next_header->free_flag)
+  {
+      unsigned long new_size = header->size + next_header->size + sizeof(header_t);
+      header->size = new_size;
+      header->next = next_header->next;
+      header_t *next_next_header = next_header->next;
+      if(next_next_header){
+        next_next_header->prev = header;
+      }
+  }
+  else if(prev_header && prev_header->free_flag)
+  {
+    unsigned long new_size = header->size + prev_header->size + sizeof(header_t);
+    prev_header->size = new_size;
+    prev_header->next = header->next;
+    header_t *next_header = header->next;
+    if(next_header){
+      next_header->prev = prev_header;
+    }
+  }
+}
 
 header_t *free_bestfit_block(size_t size)
 {
@@ -112,12 +147,13 @@ void *mm_malloc(size_t size)
 	 * If no appropriate free block is available then the increase the heap  size using 'mem_sbrk(size)'.
 	 * Try to keep the heap size as small as possible.
 	 */
-
+  //printf("Allocating %lu\n",size);
   if (size <= 0)
   { // Invalid request size
     return NULL;
   }
 
+  size = ((size + 7) / 8) * 8; //size alligned to 8 bytes'
   header_t *header;
   header = free_bestfit_block(size);
   if (header)
@@ -125,8 +161,6 @@ void *mm_malloc(size_t size)
     header->free_flag = 0;
     return (void *)(header + 1);
   }
-
-  size = ((size + 7) / 8) * 8; //size alligned to 8 bytes'
   //mem_sbrk() is wrapper function for the sbrk() system call.
   //Please use mem_sbrk() instead of sbrk() otherwise the evaluation results
   //may give wrong results
@@ -140,6 +174,7 @@ void *mm_malloc(size_t size)
   header->size = size;
   header->free_flag = 0;
   header->next = NULL;
+  header->prev = NULL;
   if (head == NULL)
   {
     head = header;
@@ -147,6 +182,7 @@ void *mm_malloc(size_t size)
   if (tail != NULL)
   {
     tail->next = header;
+    header->prev = tail;
   }
   tail = header;
   return (void *)(header + 1);
@@ -169,31 +205,13 @@ void mm_free(void *ptr)
   {
     return;
   }
-  
+
   header_t *header;
   header = (header_t *)ptr - 1;
   header->free_flag = 1;
 
-  header_t *curr = head, *block = head;
-  while (curr)
-  {
-    if (curr->free_flag)
-    {
-      block = curr->next;
-      long unsigned coal_size = curr->size;
-      // header_t *next = curr->next;
-      while (block && block->free_flag)
-      {
-        coal_size = coal_size + sizeof(header_t) + block->size;
-        // next = block->next;
-        block = block->next;
-      }
-      curr->size = coal_size;
-      // curr->next = next;
-      curr->next = block;
-    }
-    curr = curr->next;
-  }
+  //printf("Freeing from location: %x, size: %lu\n", ptr, header->size);
+  coalesce(header);
 }
 
 /*
@@ -201,6 +219,7 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+  //printf("Reallocating size: %lu\n",size);
   size = ((size + 7) / 8) * 8; //8-byte alignement
 
   if (ptr == NULL)
@@ -213,7 +232,7 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(ptr);
     return NULL;
   }
-
+  //printf("Reallocating address: %x\n", ptr);
   /*
 	 * This function should also copy the content of the previous memory block into the new block.
 	 * You can use 'memcpy()' for this purpose.
@@ -221,17 +240,36 @@ void *mm_realloc(void *ptr, size_t size)
 	 * The data structures corresponding to free memory blocks and allocated memory
 	 * blocks should also be updated.
 	*/
-  header_t *header;
+
+
+
+  header_t *header, *next_header;
   header = (header_t *)ptr - 1;
   unsigned long int prev_size = header->size;
+  next_header = header->next;
 
   if (size == prev_size)
   {
     return ptr;
   }
 
+  if(next_header && next_header->free_flag){
+    long new_size = header->size + next_header->size + sizeof(header_t);
+    if(new_size>=size){
+      header->size = new_size;
+      header->next = next_header->next;
+      header_t *next_next_header = next_header->next;
+      if(next_next_header){
+        next_next_header->prev = header;
+      }
+      return ptr;
+    }
+  }
+
   void *new_chunk = mm_malloc(size);
+
   unsigned long int cpy_size = (prev_size < size) ? prev_size : size;
+
   if (new_chunk != NULL)
   {
     memcpy(new_chunk, ptr, cpy_size);

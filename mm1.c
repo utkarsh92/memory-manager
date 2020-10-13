@@ -35,16 +35,15 @@ team_t team = {
     /* Second member's email address (leave blank if none) */
     "prashantravi@cse.iitb.ac.in"};
 
-struct tag
+struct header
 {
-  unsigned long size; //size of payload
+  unsigned long int size;
   int free_flag;
-  struct tag *next;
-  char waste[4]; //To pad to 16 bytes
+  struct header *next;
+  struct header *prev;
 };
 
-typedef struct tag tag_t;
-
+typedef struct header header_t;
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
@@ -58,7 +57,7 @@ typedef struct tag tag_t;
  */
 
 void *init_mem_sbrk_break = NULL;
-tag_t *head_header, *head_footer, *tail_header, *tail_footer;
+header_t *head, *tail;
 
 int mm_init(void)
 {
@@ -66,10 +65,8 @@ int mm_init(void)
   //This function is called every time before each test run of the trace.
   //It should reset the entire state of your malloc or the consecutive trace runs will give wrong answer.
 
-  head_header = NULL;
-  head_footer = NULL;
-  tail_header = NULL;
-  tail_footer = NULL;
+  head = NULL;
+  tail = NULL;
 
   /*
 	 * This function should initialize and reset any data structures used to represent the starting state(empty heap)
@@ -81,11 +78,46 @@ int mm_init(void)
 }
 
 //---------------------------------------------------------------------------------------------------------------
+void coalesce(header_t *header){
+  header_t *next_header, *prev_header;
+  next_header = header->next;
+  prev_header = header->prev;
+  if(next_header && prev_header && next_header->free_flag && prev_header->free_flag)
+  {
+    unsigned long new_size = header->size + prev_header->size + next_header->size + 2*sizeof(header_t);
+    prev_header->size = new_size;
+    prev_header->next = next_header->next;
+    header_t *next_next_header = next_header->next;
+    if(next_next_header){
+      next_next_header->prev = prev_header;
+    }
+  }
+  else if(next_header && next_header->free_flag)
+  {
+      unsigned long new_size = header->size + next_header->size + sizeof(header_t);
+      header->size = new_size;
+      header->next = next_header->next;
+      header_t *next_next_header = next_header->next;
+      if(next_next_header){
+        next_next_header->prev = header;
+      }
+  }
+  else if(prev_header && prev_header->free_flag)
+  {
+    unsigned long new_size = header->size + prev_header->size + sizeof(header_t);
+    prev_header->size = new_size;
+    prev_header->next = header->next;
+    header_t *next_header = header->next;
+    if(next_header){
+      next_header->prev = prev_header;
+    }
+  }
+}
 
-tag_t *free_bestfit_block(size_t size)
+header_t *free_bestfit_block(size_t size)
 {
-  tag_t *curr = head_header, *block = NULL;
-  unsigned long min_size = ULONG_MAX;
+  header_t *curr = head, *block = NULL;
+  unsigned long int min_size = ULONG_MAX;
   while (curr)
   {
     if (curr->free_flag && curr->size >= size)
@@ -98,6 +130,24 @@ tag_t *free_bestfit_block(size_t size)
     }
     curr = curr->next;
   }
+
+ /*if(block!=NULL){
+    long rem_space = block->size - size - sizeof(header_t);
+    if(rem_space >= 8){
+      //printf("Demand size:%lu\n",size);
+      //printf("Before breaking, block size: %lu\nblock header start: %x, block start: %x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
+      header_t *break_header;
+      break_header = (void *)((char *)block + sizeof(header_t) + size);
+      break_header->size = rem_space;
+      break_header->next = block->next;
+      break_header->free_flag = 1;
+      block->size = size;
+      block->next = break_header;
+      //printf("After breaking, left part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
+      //printf("After breaking, right part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", break_header->size, (char *)break_header, (char *)break_header + sizeof(header_t), (char *)break_header + sizeof(header_t) + break_header->size);
+      //printf("\n\n");
+    }
+  } */
   return block;
 }
 
@@ -115,58 +165,45 @@ void *mm_malloc(size_t size)
 	 * If no appropriate free block is available then the increase the heap  size using 'mem_sbrk(size)'.
 	 * Try to keep the heap size as small as possible.
 	 */
-
+  //printf("Allocating %lu\n",size);
   if (size <= 0)
   { // Invalid request size
     return NULL;
   }
 
-  tag_t *header, *footer;
+  size = ((size + 7) / 8) * 8; //size alligned to 8 bytes'
+  header_t *header;
   header = free_bestfit_block(size);
   if (header)
   {
     header->free_flag = 0;
-
-    footer = (void *)((char *)header + sizeof(tag_t) + header->size);
-    footer->free_flag = 0;
-
     return (void *)(header + 1);
   }
-
-  size = ((size + 7) / 8) * 8; //size alligned to 8 bytes'
+  //if(header && header->next) coalesce(header->next);
   //mem_sbrk() is wrapper function for the sbrk() system call.
   //Please use mem_sbrk() instead of sbrk() otherwise the evaluation results
   //may give wrong results
-  size_t chunk_size = size + 2 * sizeof(tag_t);
+  size_t chunk_size = size + sizeof(header_t);
   void *block = mem_sbrk(chunk_size);
-
   if (block == (void *)-1)
   {
     return NULL;
   }
-
   header = block;
-  footer = (void *)((char *)block + sizeof(tag_t) + size); //(char*) so that we can increment byte by byte
-  header->size = footer->size = size;
-  header->free_flag = footer->free_flag = 0;
-  header->next = footer->next = NULL;
-
-  if (head_header == NULL)
+  header->size = size;
+  header->free_flag = 0;
+  header->next = NULL;
+  header->prev = NULL;
+  if (head == NULL)
   {
-    //only gets updated once after init
-    head_header = header;
-    head_footer = footer;
+    head = header;
   }
-
-  if (tail_header != NULL)
+  if (tail != NULL)
   {
-    tail_header->next = header;
-    footer->next = tail_footer;
+    tail->next = header;
+    header->prev = tail;
   }
-
-  tail_header = header;
-  tail_footer = footer;
-
+  tail = header;
   return (void *)(header + 1);
 }
 
@@ -188,60 +225,12 @@ void mm_free(void *ptr)
     return;
   }
 
-  tag_t *header, *footer;
-  header = (tag_t *)ptr - 1;
-  footer = (void *)((char *)ptr + header->size);
-  header->free_flag = footer->free_flag = 1;
+  header_t *header;
+  header = (header_t *)ptr - 1;
+  header->free_flag = 1;
 
-  tag_t *before = footer->next; //points to prev block footer
-  tag_t *after = header->next;  //points to next block header
-
-  if (before && after && (before->free_flag == 1) && (after->free_flag == 1))
-  {
-    //free blocks on both ends
-    tag_t *before_header = (void *)((char *)before - before->size - sizeof(tag_t));
-    tag_t *after_footer = (void *)((char *)after + sizeof(tag_t) + after->size);
-    unsigned long new_size = before->size + after->size + header->size + 4 * sizeof(tag_t);
-
-    before_header->next = after->next;
-    after_footer->next = before->next;
-    before_header->size = after_footer->size = new_size;
-
-    //new current header and footer
-    header = before_header;
-    footer = after_footer;
-  }
-  else
-  {
-    if (before && (before->free_flag == 1))
-    {
-      //free block only before
-      unsigned long new_size = footer->size + before->size + 2 * sizeof(tag_t);
-      footer->next = before->next;
-      footer->size = new_size;
-
-      tag_t *before_header = (void *)((char *)before - before->size - sizeof(tag_t));
-      before_header->next = header->next;
-      before_header->size = new_size;
-
-      //new current header
-      header = before_header;
-    }
-    else if (after && (after->free_flag == 1))
-    {
-      //free block only after
-      unsigned long new_size = header->size + after->size + 2 * sizeof(tag_t);
-      header->next = after->next;
-      header->size = new_size;
-
-      tag_t *after_footer = (void *)((char *)after + sizeof(tag_t) + after->size);
-      after_footer->next = footer->next;
-      after_footer->size = new_size;
-
-      //new current footer
-      footer = after_footer;
-    }
-  }
+  //printf("Freeing from location: %x, size: %lu\n", ptr, header->size);
+  coalesce(header);
 }
 
 /*
@@ -249,6 +238,7 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+  //printf("Reallocating size: %lu\n",size);
   size = ((size + 7) / 8) * 8; //8-byte alignement
 
   if (ptr == NULL)
@@ -261,7 +251,7 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(ptr);
     return NULL;
   }
-
+  //printf("Reallocating address: %x\n", ptr);
   /*
 	 * This function should also copy the content of the previous memory block into the new block.
 	 * You can use 'memcpy()' for this purpose.
@@ -269,22 +259,42 @@ void *mm_realloc(void *ptr, size_t size)
 	 * The data structures corresponding to free memory blocks and allocated memory
 	 * blocks should also be updated.
 	*/
-  tag_t *header;
-  header = (tag_t *)ptr - 1;
-  unsigned long prev_size = header->size;
+
+
+
+  header_t *header, *next_header;
+  header = (header_t *)ptr - 1;
+  unsigned long int prev_size = header->size;
+  next_header = header->next;
 
   if (size == prev_size)
   {
     return ptr;
   }
 
+  if(next_header && next_header->free_flag){
+    long new_size = header->size + next_header->size + sizeof(header_t);
+    if(new_size>=size){
+      header->size = new_size;
+      header->next = next_header->next;
+      header_t *next_next_header = next_header->next;
+      if(next_next_header){
+        next_next_header->prev = header;
+      }
+      return ptr;
+    }
+  }
+
   void *new_chunk = mm_malloc(size);
-  unsigned long cpy_size = (prev_size < size) ? prev_size : size;
+
+  unsigned long int cpy_size = (prev_size < size) ? prev_size : size;
+
   if (new_chunk != NULL)
   {
     memcpy(new_chunk, ptr, cpy_size);
     mm_free(ptr);
-    return new_chunk;
+    ptr = new_chunk;
+    return ptr;
   }
   else
   {
