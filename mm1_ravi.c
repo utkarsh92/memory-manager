@@ -37,7 +37,7 @@ team_t team = {
 
 struct header
 {
-  size_t size;
+  unsigned long int size;
   int free_flag;
   struct header *next;
   struct header *prev;
@@ -77,64 +77,53 @@ int mm_init(void)
   return 0; //Returns 0 on successfull initialization.
 }
 
-
-void coalesce(header_t *header)
-{
-  if (header->free_flag == 0)
-    return; //block is not free
-
-  header_t *after = header->next;
-  header_t *before = header->prev;
-
-  if (after && before && after->free_flag && before->free_flag)
+//---------------------------------------------------------------------------------------------------------------
+void coalesce(header_t *header){
+  header_t *next_header, *prev_header;
+  next_header = header->next;
+  prev_header = header->prev;
+  if(next_header && prev_header && next_header->free_flag && prev_header->free_flag)
   {
-    //before and after blocks are free
-    size_t new_size = header->size + before->size + after->size + 2 * sizeof(header_t);
-    before->size = new_size;
-
-    before->next = after->next;
-    if (after->next)
-      after->next->prev = before;
-
-    if (tail == after)
-      tail = before;
+    //checking if both previous and next block are free
+    unsigned long new_size = header->size + prev_header->size + next_header->size + 2*sizeof(header_t);
+    prev_header->size = new_size;
+    prev_header->next = next_header->next;
+    header_t *next_next_header = next_header->next;
+    if(next_next_header){
+      next_next_header->prev = prev_header;
+    }
   }
-  else if (after && after->free_flag)
+  else if(next_header && next_header->free_flag)
   {
-    //only after block is free
-    size_t new_size = header->size + after->size + sizeof(header_t);
-    header->size = new_size;
-
-    header->next = after->next;
-    if (after->next)
-      after->next->prev = header;
-
-    if (tail == after)
-      tail = header;
+      //checking if next block only is free
+      unsigned long new_size = header->size + next_header->size + sizeof(header_t);
+      header->size = new_size;
+      header->next = next_header->next;
+      header_t *next_next_header = next_header->next;
+      if(next_next_header){
+        next_next_header->prev = header;
+      }
   }
-  else if (before && before->free_flag)
+  else if(prev_header && prev_header->free_flag)
   {
-    //only before block is free
-    size_t new_size = header->size + before->size + sizeof(header_t);
-    before->size = new_size;
-
-    before->next = header->next;
-    if (header->next)
-      header->next->prev = before;
-
-    if (tail == header)
-      tail = before;
+    //checking if prev block only is free
+    unsigned long new_size = header->size + prev_header->size + sizeof(header_t);
+    prev_header->size = new_size;
+    prev_header->next = header->next;
+    header_t *next_header = header->next;
+    if(next_header){
+      next_header->prev = prev_header;
+    }
   }
 }
 
 header_t *free_bestfit_block(size_t size)
 {
   header_t *curr = head, *block = NULL;
-  size_t min_size = ULONG_MAX;
-  
+  unsigned long int min_size = ULONG_MAX;
   while (curr)
   {
-    if (curr->free_flag && (size <= curr->size))
+    if (curr->free_flag && curr->size >= size)
     {
       if (curr->size <= min_size)
       {
@@ -145,28 +134,28 @@ header_t *free_bestfit_block(size_t size)
     curr = curr->next;
   }
 
-  if (block != NULL)
-  {
-    ssize_t rem_space = block->size - size - sizeof(header_t);
+// Yhi h wo fragmentation ka code jo chl ni prev_header
 
-    if ((rem_space % ALIGNMENT == 0) && (rem_space >= ALIGNMENT))
-    {
+ if(block!=NULL){
+    long rem_space = block->size - size - sizeof(header_t);
+    if(rem_space >= 8){
       //printf("Demand size:%lu\n",size);
       //printf("Before breaking, block size: %lu\nblock header start: %x, block start: %x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
-      header_t *break_header = (void *)((char *)block + sizeof(header_t) + size);
+      header_t *break_header;
+      break_header = (void *)((char *)block + sizeof(header_t) + size);
       break_header->size = rem_space;
-      break_header->free_flag = 1;
       break_header->next = block->next;
-      break_header->prev = block;
-
+      break_header->free_flag = 1;
       block->size = size;
-      block->free_flag = 0;
       block->next = break_header;
-
-      if (break_header->next)
-        break_header->next->prev = break_header;
+      break_header->prev = block;
+      if(break_header->next){
+        (break_header->next)->prev = break_header;
+      }
       else
+      {
         tail = break_header;
+      }
       //printf("After breaking, left part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
       //printf("After breaking, right part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", break_header->size, (char *)break_header, (char *)break_header + sizeof(header_t), (char *)break_header + sizeof(header_t) + break_header->size);
       //printf("\n\n");
@@ -196,7 +185,8 @@ void *mm_malloc(size_t size)
   }
 
   size = ((size + 7) / 8) * 8; //size alligned to 8 bytes'
-  header_t *header = free_bestfit_block(size);
+  header_t *header;
+  header = free_bestfit_block(size);
   if (header)
   {
     header->free_flag = 0;
@@ -212,26 +202,21 @@ void *mm_malloc(size_t size)
   {
     return NULL;
   }
-
   header = block;
   header->size = size;
   header->free_flag = 0;
   header->next = NULL;
   header->prev = NULL;
-
   if (head == NULL)
   {
     head = header;
   }
-
   if (tail != NULL)
   {
     tail->next = header;
     header->prev = tail;
   }
-
   tail = header;
-
   return (void *)(header + 1);
 }
 
@@ -257,6 +242,7 @@ void mm_free(void *ptr)
   header = (header_t *)ptr - 1;
   header->free_flag = 1;
 
+  //printf("Freeing from location: %x, size: %lu\n", ptr, header->size);
   coalesce(header);
 }
 
@@ -265,6 +251,7 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+  //printf("Reallocating size: %lu\n",size);
   size = ((size + 7) / 8) * 8; //8-byte alignement
 
   if (ptr == NULL)
@@ -277,6 +264,7 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(ptr);
     return NULL;
   }
+  //printf("Reallocating address: %x\n", ptr);
   /*
 	 * This function should also copy the content of the previous memory block into the new block.
 	 * You can use 'memcpy()' for this purpose.
@@ -285,24 +273,27 @@ void *mm_realloc(void *ptr, size_t size)
 	 * blocks should also be updated.
 	*/
 
+
   header_t *header;
   header = (header_t *)ptr - 1;
-  size_t prev_size = header->size;
+  unsigned long int prev_size = header->size;
 
   if (size == prev_size)
   {
     return ptr;
   }
 
-  void *new_ptr = mm_malloc(size);
+  void *new_chunk = mm_malloc(size);
 
-  size_t cpy_size = (prev_size < size) ? prev_size : size;
+  unsigned long int cpy_size = (prev_size < size) ? prev_size : size;
 
-  if (new_ptr != NULL)
+  
+if (new_chunk != NULL)
   {
-    memcpy(new_ptr, ptr, cpy_size);
+    memcpy(new_chunk, ptr, cpy_size);
     mm_free(ptr);
-    return new_ptr;
+    ptr = new_chunk;
+    return ptr;
   }
   else
   {

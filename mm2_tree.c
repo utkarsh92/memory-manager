@@ -35,15 +35,16 @@ team_t team = {
     /* Second member's email address (leave blank if none) */
     "prashantravi@cse.iitb.ac.in"};
 
-struct header
+struct Node
 {
   size_t size;
-  int free_flag;
-  struct header *next;
-  struct header *prev;
+  int height;
+  // int bf;
+  struct Node *left;
+  struct Node *right;
 };
 
-typedef struct header header_t;
+typedef struct Node node_t;
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
 
@@ -57,7 +58,7 @@ typedef struct header header_t;
  */
 
 void *init_mem_sbrk_break = NULL;
-header_t *head, *tail;
+node_t *root, *best_node, *best_node_parent;
 
 int mm_init(void)
 {
@@ -65,8 +66,7 @@ int mm_init(void)
   //This function is called every time before each test run of the trace.
   //It should reset the entire state of your malloc or the consecutive trace runs will give wrong answer.
 
-  head = NULL;
-  tail = NULL;
+  root = NULL;
 
   /*
 	 * This function should initialize and reset any data structures used to represent the starting state(empty heap)
@@ -77,19 +77,19 @@ int mm_init(void)
   return 0; //Returns 0 on successfull initialization.
 }
 
-
-void coalesce(header_t *header)
+/*
+void coalesce(node_t *header)
 {
   if (header->free_flag == 0)
     return; //block is not free
 
-  header_t *after = header->next;
-  header_t *before = header->prev;
+  node_t *after = header->next;
+  node_t *before = header->prev;
 
   if (after && before && after->free_flag && before->free_flag)
   {
     //before and after blocks are free
-    size_t new_size = header->size + before->size + after->size + 2 * sizeof(header_t);
+    size_t new_size = header->size + before->size + after->size + 2 * sizeof(node_t);
     before->size = new_size;
 
     before->next = after->next;
@@ -102,7 +102,7 @@ void coalesce(header_t *header)
   else if (after && after->free_flag)
   {
     //only after block is free
-    size_t new_size = header->size + after->size + sizeof(header_t);
+    size_t new_size = header->size + after->size + sizeof(node_t);
     header->size = new_size;
 
     header->next = after->next;
@@ -115,7 +115,7 @@ void coalesce(header_t *header)
   else if (before && before->free_flag)
   {
     //only before block is free
-    size_t new_size = header->size + before->size + sizeof(header_t);
+    size_t new_size = header->size + before->size + sizeof(node_t);
     before->size = new_size;
 
     before->next = header->next;
@@ -126,53 +126,58 @@ void coalesce(header_t *header)
       tail = before;
   }
 }
+*/
 
-header_t *free_bestfit_block(size_t size)
+node_t *find_bestfit(size_t size)
 {
-  header_t *curr = head, *block = NULL;
-  size_t min_size = ULONG_MAX;
-  
-  while (curr)
+  best_node = NULL;
+  best_node_parent = NULL;
+  search_tree(root, NULL, size);
+
+  if (best_node_parent != NULL)
   {
-    if (curr->free_flag && (size <= curr->size))
-    {
-      if (curr->size <= min_size)
-      {
-        min_size = curr->size;
-        block = curr;
-      }
-    }
-    curr = curr->next;
   }
 
-  if (block != NULL)
+  return best_node;
+}
+
+void insert_tree(node_t *node, node_t *new_node)
+{
+  if(new_node->size <= node->size)
   {
-    ssize_t rem_space = block->size - size - sizeof(header_t);
-
-    if ((rem_space % ALIGNMENT == 0) && (rem_space >= ALIGNMENT))
-    {
-      //printf("Demand size:%lu\n",size);
-      //printf("Before breaking, block size: %lu\nblock header start: %x, block start: %x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
-      header_t *break_header = (void *)((char *)block + sizeof(header_t) + size);
-      break_header->size = rem_space;
-      break_header->free_flag = 1;
-      break_header->next = block->next;
-      break_header->prev = block;
-
-      block->size = size;
-      block->free_flag = 0;
-      block->next = break_header;
-
-      if (break_header->next)
-        break_header->next->prev = break_header;
-      else
-        tail = break_header;
-      //printf("After breaking, left part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
-      //printf("After breaking, right part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", break_header->size, (char *)break_header, (char *)break_header + sizeof(header_t), (char *)break_header + sizeof(header_t) + break_header->size);
-      //printf("\n\n");
-    }
+    if(node->left)
+      insert_tree(node->left, new_node);
+    else
+      node->left = new_node;
   }
-  return block;
+  else
+  {
+    /* code */
+  }
+}
+
+void search_tree(node_t *node, node_t *parent, size_t size)
+{
+  if (node == NULL)
+    return;
+
+  if (node->size == size)
+  {
+    best_node = node;
+    best_node_parent = parent;
+    return;
+  }
+
+  if (node->size > size)
+  {
+    best_node = node;
+    best_node_parent = parent;
+    search_tree(node->left, node, size);
+  }
+  else
+  {
+    search_tree(node->right, node, size);
+  }
 }
 
 /*
@@ -189,24 +194,23 @@ void *mm_malloc(size_t size)
 	 * If no appropriate free block is available then the increase the heap  size using 'mem_sbrk(size)'.
 	 * Try to keep the heap size as small as possible.
 	 */
-  //printf("Allocating %lu\n",size);
   if (size <= 0)
   { // Invalid request size
     return NULL;
   }
 
   size = ((size + 7) / 8) * 8; //size alligned to 8 bytes'
-  header_t *header = free_bestfit_block(size);
+  node_t *header = find_bestfit(size);
   if (header)
   {
-    header->free_flag = 0;
+    // header->free_flag = 0;
     return (void *)(header + 1);
   }
-  //if(header && header->next) coalesce(header->next);
+
   //mem_sbrk() is wrapper function for the sbrk() system call.
   //Please use mem_sbrk() instead of sbrk() otherwise the evaluation results
   //may give wrong results
-  size_t chunk_size = size + sizeof(header_t);
+  size_t chunk_size = size + sizeof(node_t);
   void *block = mem_sbrk(chunk_size);
   if (block == (void *)-1)
   {
@@ -215,22 +219,9 @@ void *mm_malloc(size_t size)
 
   header = block;
   header->size = size;
-  header->free_flag = 0;
-  header->next = NULL;
-  header->prev = NULL;
-
-  if (head == NULL)
-  {
-    head = header;
-  }
-
-  if (tail != NULL)
-  {
-    tail->next = header;
-    header->prev = tail;
-  }
-
-  tail = header;
+  header->height = 0;
+  header->left = NULL;
+  header->right = NULL;
 
   return (void *)(header + 1);
 }
@@ -253,11 +244,16 @@ void mm_free(void *ptr)
     return;
   }
 
-  header_t *header;
-  header = (header_t *)ptr - 1;
-  header->free_flag = 1;
+  node_t *header;
+  header = (node_t *)ptr - 1;
+  header->height = 1;
 
-  coalesce(header);
+  if (root)
+    insert_tree(root, header);
+  else
+    root = header;
+
+  // coalesce(header);
 }
 
 /*
@@ -265,6 +261,7 @@ void mm_free(void *ptr)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+  //printf("Reallocating size: %lu\n",size);
   size = ((size + 7) / 8) * 8; //8-byte alignement
 
   if (ptr == NULL)
@@ -277,6 +274,7 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(ptr);
     return NULL;
   }
+  //printf("Reallocating address: %x\n", ptr);
   /*
 	 * This function should also copy the content of the previous memory block into the new block.
 	 * You can use 'memcpy()' for this purpose.
@@ -285,8 +283,8 @@ void *mm_realloc(void *ptr, size_t size)
 	 * blocks should also be updated.
 	*/
 
-  header_t *header;
-  header = (header_t *)ptr - 1;
+  node_t *header;
+  header = (node_t *)ptr - 1;
   size_t prev_size = header->size;
 
   if (size == prev_size)
