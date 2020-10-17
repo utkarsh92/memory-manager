@@ -131,7 +131,7 @@ header_t *free_bestfit_block(size_t size)
 {
   header_t *curr = head, *block = NULL;
   size_t min_size = ULONG_MAX;
-  
+
   while (curr)
   {
     if (curr->free_flag && (size <= curr->size))

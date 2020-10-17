@@ -134,7 +134,7 @@ void add_free_block(header_t *block)
 
   if(head->prev)
     printf("head has prev\n");
-  
+
   if(tail->next)
     printf("tail has next\n");
 /*
@@ -150,7 +150,7 @@ void add_free_block(header_t *block)
   {
     //both sides free
     before->size += get_size(block->size) + get_size(after->size);
-    
+
     delete_free(after);
 
     //within real block list
@@ -366,7 +366,7 @@ void mm_free(void *ptr)
 
     while (temp->next)
       temp = temp->next;
-    
+
     temp->next = header;
     header->prev = temp;
   }*/
