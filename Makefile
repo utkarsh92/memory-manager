@@ -1,7 +1,7 @@
 #
 # Students' Makefile for the Malloc Lab
 #
-TEAM = TIGERS 
+TEAM = TIGERS
 VERSION = 1
 
 CC = gcc
@@ -15,7 +15,7 @@ mdriver: $(OBJS) $(OBJS1) $(OBJS2)
 	$(CC) $(CFLAGS) -o mdriver $(OBJS)
 	$(CC) $(CFLAGS) -o mdriver1 $(OBJS1)
 	$(CC) $(CFLAGS) -o mdriver2 $(OBJS2)
-	
+
 
 mdriver.o: mdriver.c fsecs.h fcyc.h clock.h memlib.h config.h mm.h
 memlib.o: memlib.c memlib.h
@@ -31,5 +31,3 @@ clean:
 	rm -f *~ *.o mdriver
 	rm -f *~ *.o mdriver1
 	rm -f *~ *.o mdriver2
-
-
