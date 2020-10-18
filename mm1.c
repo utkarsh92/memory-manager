@@ -1,13 +1,13 @@
 /*
- * mm-naive.c - The fastest, least memory-efficient malloc package.
- *
- * In this naive approach, a block is allocated by simply incrementing
- * the brk pointer.  A block is pure payload. There are no headers or
- * footers.  Blocks are never coalesced or reused. Realloc is
- * implemented directly using mm_malloc and mm_free.
- *
- * NOTE TO STUDENTS: Replace this header comment with your own header
- * comment that gives a high level description of your solution.
+ mm1.c - This implementation is an improvement over over naive mm.case
+ In this implementation, as instructed in assignment, we have implemented a double side coalescing heap,
+ which is using best fit to search for free block to be assigned for a mm_malloc request. We are using
+ an implicit list to traverse accross all the blocks in heap. Each metadata header maintain the size of
+ it's block, a flag to indicate whether it is free or not and two pointers, one to previous block in memory
+ and one to next block.
+
+ We are also breaking a block in two blocks if it has enough space to accomodate a payload of 8 bytes (minimum
+ allocation size) thus optimizing space utilisation.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,7 +77,9 @@ int mm_init(void)
   return 0; //Returns 0 on successfull initialization.
 }
 
-
+// Coalescing happens only with prev and next block if they are free. Reason being, coalescing will work
+//like domino effect. If some block was previously free, it will merge with it's neighbor as part of an
+//earlier call.
 void coalesce(header_t *header)
 {
   if (header->free_flag == 0)
@@ -129,6 +131,7 @@ void coalesce(header_t *header)
 
 header_t *free_bestfit_block(size_t size)
 {
+  //looks for best fit block for allocation request
   header_t *curr = head, *block = NULL;
   size_t min_size = ULONG_MAX;
 
@@ -147,12 +150,11 @@ header_t *free_bestfit_block(size_t size)
 
   if (block != NULL)
   {
+    // If size of found block is greater than required size and difference is greater than 8 byte,
+    //we will split the found block.
     ssize_t rem_space = block->size - size - sizeof(header_t);
-
     if ((rem_space % ALIGNMENT == 0) && (rem_space >= ALIGNMENT))
     {
-      //printf("Demand size:%lu\n",size);
-      //printf("Before breaking, block size: %lu\nblock header start: %x, block start: %x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
       header_t *break_header = (void *)((char *)block + sizeof(header_t) + size);
       break_header->size = rem_space;
       break_header->free_flag = 1;
@@ -167,9 +169,6 @@ header_t *free_bestfit_block(size_t size)
         break_header->next->prev = break_header;
       else
         tail = break_header;
-      //printf("After breaking, left part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", block->size, (char *)block, (char *)block + sizeof(header_t), (char *)block + sizeof(header_t) + block->size);
-      //printf("After breaking, right part block size: %lu\nblock header start: %x, block start:%x, block end: %x\n", break_header->size, (char *)break_header, (char *)break_header + sizeof(header_t), (char *)break_header + sizeof(header_t) + break_header->size);
-      //printf("\n\n");
     }
   }
   return block;
@@ -189,7 +188,7 @@ void *mm_malloc(size_t size)
 	 * If no appropriate free block is available then the increase the heap  size using 'mem_sbrk(size)'.
 	 * Try to keep the heap size as small as possible.
 	 */
-  //printf("Allocating %lu\n",size);
+
   if (size <= 0)
   { // Invalid request size
     return NULL;
@@ -202,7 +201,7 @@ void *mm_malloc(size_t size)
     header->free_flag = 0;
     return (void *)(header + 1);
   }
-  //if(header && header->next) coalesce(header->next);
+
   //mem_sbrk() is wrapper function for the sbrk() system call.
   //Please use mem_sbrk() instead of sbrk() otherwise the evaluation results
   //may give wrong results
@@ -294,6 +293,8 @@ void *mm_realloc(void *ptr, size_t size)
     return ptr;
   }
 
+  // Check if next block in memory is free. If it is free, we see if it brings enough space to satisfy
+  // current size request. If it does, merge it with next block and return ptr.
   header_t *next = header->next;
   if(next && next->free_flag){
     size_t tot_size = prev_size + next->size + sizeof(header_t);
