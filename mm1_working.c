@@ -289,9 +289,25 @@ void *mm_realloc(void *ptr, size_t size)
   header = (header_t *)ptr - 1;
   size_t prev_size = header->size;
 
-  if (size == prev_size)
+  if (size <= prev_size)
   {
     return ptr;
+  }
+
+  header_t *next = header->next;
+  if(next && next->free_flag){
+    size_t tot_size = prev_size + next->size + sizeof(header_t);
+    if(tot_size>=size){
+      header->size = tot_size;
+      header->next = next->next;
+      if(next->next){
+        next->next->prev = header;
+      }
+      if(next == tail){
+        tail = header;
+      }
+      return ptr;
+    }
   }
 
   void *new_ptr = mm_malloc(size);
