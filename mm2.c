@@ -1,10 +1,10 @@
 /*
- * mm-naive.c - The fastest, least memory-efficient malloc package.
+ * mm-2.c - The fastest, most memory-efficient malloc package.
  *
- * In this naive approach, a block is allocated by simply incrementing
- * the brk pointer.  A block is pure payload. There are no headers or
- * footers.  Blocks are never coalesced or reused. Realloc is
- * implemented directly using mm_malloc and mm_free.
+ * In this approach, we are maintaining an explicit free list instead of implicit
+ * which saves us a lot of time wasted during free block searching. Also the header
+ * packaging has also been optimized so that it can hold more information without
+ * increasing it's space.
  *
  * NOTE TO STUDENTS: Replace this header comment with your own header
  * comment that gives a high level description of your solution.
@@ -131,16 +131,6 @@ void add_free_block(header_t *block)
     tail = block;
     return;
   }
-  /*
-  if (head->prev)
-    printf("head has prev\n");
-
-  if (tail->next)
-    printf("tail has next\n");
-
-  void *check = (void *)((char *)last_block + get_size(last_block->size));
-  if(check == mem_sbrk(0))
-    printf("last_blk not correct\n");*/
 
   //REAL before and after
   header_t *before = block->prev_real;
@@ -221,7 +211,6 @@ int break_block(header_t *block, size_t new_size)
       block->size = new_size;
 
     header_t *free_blk = (void *)((char *)block + new_size);
-    // free_blk->free_flag = 1;
     free_blk->size = sizeof(header_t) + rem_space;
     free_blk->prev_real = block;
 
@@ -237,15 +226,13 @@ int break_block(header_t *block, size_t new_size)
   return 0;
 }
 
+//searches for free block using bestfit
+//breaks block into 2, if free space is available after satisfying
+//user size request
 header_t *free_bestfit_block(size_t size)
 {
-  // printf("\nlooking for best fit (%d)\n", size);
-
   if (!head)
-  {
-    // printf("\nfound NULL\n");
     return NULL;
-  }
 
   header_t *curr = head, *block = NULL;
   size_t min_size = ULONG_MAX;
@@ -268,16 +255,10 @@ header_t *free_bestfit_block(size_t size)
 
   if (block)
   {
-    // printf("\nfound (%d)\n", block->size);
     delete_free(block);
     break_block(block, size);
   }
-  else
-  {
-    // printf("\nNO bestfit\n");
-  }
 
-  // printf("\nbestfit done\n");
   return block;
 }
 
@@ -288,7 +269,6 @@ header_t *free_bestfit_block(size_t size)
 
 void *mm_malloc(size_t size)
 {
-  // printf("1");
   /*
 	 * This function should keep track of the allocated memory blocks.
 	 * The block allocation should minimize the number of holes (chucks of unusable memory) in the heap memory.
@@ -296,7 +276,6 @@ void *mm_malloc(size_t size)
 	 * If no appropriate free block is available then the increase the heap  size using 'mem_sbrk(size)'.
 	 * Try to keep the heap size as small as possible.
 	 */
-  //printf("Allocating %lu\n",size);
   if (size <= 0)
   { // Invalid request size
     return NULL;
@@ -308,7 +287,6 @@ void *mm_malloc(size_t size)
   header_t *block = free_bestfit_block(blk_size);
   if (block)
   {
-    // printf("2");
     return (void *)(block + 1);
   }
 
@@ -321,7 +299,7 @@ void *mm_malloc(size_t size)
   {
     return NULL;
   }
-  // header_t *header;
+
   block = (header_t *)temp;
   block->size = get_size(blk_size);
   block->next = NULL;
@@ -329,8 +307,7 @@ void *mm_malloc(size_t size)
 
   block->prev_real = last_block;
   last_block = block;
-  // heap_end = mem_sbrk(0);
-  // printf("3");
+
   return (void *)(block + 1);
 }
 
@@ -346,55 +323,13 @@ void mm_free(void *ptr)
 	 * If the freed block is at the end of the heap then you can also decrease the heap size
 	 * using 'mem_sbrk(-size)'.
 	 */
-
-  // printf("\n==========\n");
-  // printf("4");
   if (ptr == NULL)
   {
     return;
   }
 
   header_t *block = (header_t *)ptr - 1;
-  /*
-  printf("Free (%d)\n",block->size);
-
-  printf("BEFORE: ");
-  header_t *t = head;
-  while (t)
-  {
-    printf("(%d); ", t->size);
-    t = t->next;
-  }
-  printf("end\n");*/
-
-  /*if(head == NULL)
-  {
-    head = header;
-  }
-  else
-  {
-    header_t *temp = head;
-
-    while (temp->next)
-      temp = temp->next;
-
-    temp->next = header;
-    header->prev = temp;
-  }*/
-
   add_free_block(block);
-  /*
-  printf("AFTER: ");
-  t = head;
-  while (t)
-  {
-    printf("(%d); ", t->size);
-    t = t->next;
-  }
-  printf("end\n");
-  if (head)
-    printf("HEAD: (%d)\n", head->size);*/
-  // printf("5");
 }
 
 void *create_new_copy(void *ptr, size_t prev_size, void *new_ptr, size_t size)
@@ -444,9 +379,6 @@ void *mm_realloc(void *ptr, size_t size)
 
   if (size <= prev_size)
   {
-    //same size
-    //return as it is
-    // printf("0,");
     return ptr;
   }
 
@@ -462,38 +394,11 @@ void *mm_realloc(void *ptr, size_t size)
     else
       last_block = block;
 
-    //break_block(block, size);
-
-    //printf("7,");
     return ptr;
   }
-/*
-  // printf("3,");
-  //try to find bestfit block
-  header_t *temp = free_bestfit_block(size + sizeof(header_t));
-  // printf("4,");
-  if (temp)
-  {
-    // printf("5,");
-    void *new_ptr = (void *)(temp + 1);
-    // return create_new_copy(ptr, prev_size, new_ptr, size);
-    size_t cpy_size = (prev_size < size) ? prev_size : size;
 
-    if (new_ptr)
-    {
-      memcpy(new_ptr, ptr, cpy_size);
-      mm_free(ptr);
-      return new_ptr;
-    }
-    else
-    {
-      return NULL;
-    }
-  }*/
-  // printf("6,");
   //nothing worked, create new blk
   void *new_ptr = mm_malloc(size);
-  // return create_new_copy(ptr, prev_size, new_ptr, size);
   size_t cpy_size = (prev_size < size) ? prev_size : size;
 
   if (new_ptr)
