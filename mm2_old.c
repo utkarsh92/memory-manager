@@ -131,13 +131,13 @@ void add_free_block(header_t *block)
     tail = block;
     return;
   }
-  /*
-  if (head->prev)
+
+  if(head->prev)
     printf("head has prev\n");
 
-  if (tail->next)
+  if(tail->next)
     printf("tail has next\n");
-  
+/*
   void *check = (void *)((char *)last_block + get_size(last_block->size));
   if(check == mem_sbrk(0))
     printf("last_blk not correct\n");*/
@@ -205,38 +205,6 @@ void add_free_block(header_t *block)
   }
 }
 
-//attempts to break/split/fragment block
-//and add the newly created free block to list, if any
-int break_block(header_t *block, size_t new_size)
-{
-  ssize_t rem_space = get_size(block->size) - new_size - sizeof(header_t);
-
-  if ((rem_space % ALIGNMENT == 0) && (rem_space >= ALIGNMENT))
-  {
-    header_t *after = (header_t *)((char *)block + get_size(block->size));
-
-    if (get_free(block->size))
-      block->size = set_free(new_size);
-    else
-      block->size = new_size;
-
-    header_t *free_blk = (void *)((char *)block + new_size);
-    // free_blk->free_flag = 1;
-    free_blk->size = sizeof(header_t) + rem_space;
-    free_blk->prev_real = block;
-
-    if (last_block == block)
-      last_block = free_blk;
-    else
-      after->prev_real = free_blk;
-
-    add_free_block(free_blk);
-    return 1;
-  }
-
-  return 0;
-}
-
 header_t *free_bestfit_block(size_t size)
 {
   // printf("\nlooking for best fit (%d)\n", size);
@@ -270,7 +238,28 @@ header_t *free_bestfit_block(size_t size)
   {
     // printf("\nfound (%d)\n", block->size);
     delete_free(block);
-    break_block(block, size);
+
+    ssize_t rem_space = block->size - size - sizeof(header_t);
+    if ((rem_space % ALIGNMENT == 0) && (rem_space >= ALIGNMENT))
+    {
+      header_t *after = (header_t *)((char *)block + block->size);
+
+      block->size = size;
+
+      header_t *free_blk = (void *)((char *)block + size);
+      // free_blk->free_flag = 1;
+      free_blk->size = sizeof(header_t) + rem_space;
+      free_blk->prev_real = block;
+
+      if (last_block == block)
+        last_block = free_blk;
+      else
+        after->prev_real = free_blk;
+
+      // printf("\ncreated new free (%d)\n", free_blk->size);
+
+      add_free_block(free_blk);
+    }
   }
   else
   {
@@ -348,14 +337,14 @@ void mm_free(void *ptr)
 	 */
 
   // printf("\n==========\n");
-  // printf("4");
+// printf("4");
   if (ptr == NULL)
   {
     return;
   }
 
   header_t *block = (header_t *)ptr - 1;
-  /*
+/*
   printf("Free (%d)\n",block->size);
 
   printf("BEFORE: ");
@@ -383,7 +372,7 @@ void mm_free(void *ptr)
   }*/
 
   add_free_block(block);
-  /*
+/*
   printf("AFTER: ");
   t = head;
   while (t)
@@ -394,23 +383,7 @@ void mm_free(void *ptr)
   printf("end\n");
   if (head)
     printf("HEAD: (%d)\n", head->size);*/
-  // printf("5");
-}
-
-void *create_new_copy(void *ptr, size_t prev_size, void *new_ptr, size_t size)
-{
-  size_t cpy_size = (prev_size < size) ? prev_size : size;
-
-  if (new_ptr)
-  {
-    memcpy(new_ptr, ptr, cpy_size);
-    mm_free(ptr);
-    return new_ptr;
-  }
-  else
-  {
-    return NULL;
-  }
+    // printf("5");
 }
 
 /*
@@ -443,75 +416,12 @@ void *mm_realloc(void *ptr, size_t size)
   size_t prev_size = block->size - sizeof(header_t);
 
   if (size == prev_size)
-  {
-    //same size
-    //return as it is
-    // printf("0,");
     return ptr;
-  }
-  else if (size < prev_size)
-  {
-    //less size
-    if (break_block(block, size)) //since no testcase might fail on actual data
-    {
-      //break block went successfully
-      //pointer stays same
-      // printf("1,");
-      return ptr;
-    }
-  }
-  else
-  {
-    //greater size
-    //pointer stays at same place
-    header_t *after = (header_t *)((char *)block + get_size(block->size));
-    if ((after <= last_block) && get_free(after->size) && (size <= (prev_size + get_size(after->size))))
-    {
-      delete_free(after);
-      block->size += get_size(after->size);
 
-      header_t *after_after = (header_t *)((char *)after + get_size(after->size));
-      if (after_after <= last_block)
-        after_after->prev_real = block;
-      else
-        last_block = block;
-
-      break_block(block, size);
-
-      printf("7,");
-      return ptr;
-    }
-  }
-/*
-  // printf("3,");
-  //try to find bestfit block
-  header_t *temp = free_bestfit_block(size + sizeof(header_t));
-  // printf("4,");
-  if (temp)
-  {
-    // printf("5,");
-    void *new_ptr = (void *)(temp + 1);
-    // return create_new_copy(ptr, prev_size, new_ptr, size);
-    size_t cpy_size = (prev_size < size) ? prev_size : size;
-
-    if (new_ptr)
-    {
-      memcpy(new_ptr, ptr, cpy_size);
-      mm_free(ptr);
-      return new_ptr;
-    }
-    else
-    {
-      return NULL;
-    }
-  }*/
-  // printf("6,");
-  //nothing worked, create new blk
   void *new_ptr = mm_malloc(size);
-  // return create_new_copy(ptr, prev_size, new_ptr, size);
   size_t cpy_size = (prev_size < size) ? prev_size : size;
 
-  if (new_ptr)
+  if (new_ptr != NULL)
   {
     memcpy(new_ptr, ptr, cpy_size);
     mm_free(ptr);
